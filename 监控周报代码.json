@@ -1,3 +1,5 @@
+
+------------ 订单揽收情况
 drop table if exists data_science.alisa_test1_orderrate1_tmp;
 create table if not exists data_science.alisa_test1_orderrate1_tmp as
 select a.*,b.bno
@@ -23,10 +25,6 @@ group by waybill_no,source_zone_code,consigned_tm,inputer_emp_code) a
 left outer join data_science.alisa_test1_orderrate1_tmp b on a.waybill_no=b.bno;
 
 
-
------------- 订单揽收情况
-
-
 ------------ 订单揽收情况
 drop table if exists data_science.alisa_test1_orderrate1_tmp3;
 create table if not exists data_science.alisa_test1_orderrate1_tmp3 as
@@ -48,7 +46,7 @@ and CUSTOMER_FEEDBACK in ('853970644','853970648')
   group by regexp_replace(split(content,',')[2],'订单号','')) b on a.orderid=b.orderid;
 
 
-  drop table if exists data_science.alisa_test1_orderrate1_tmp6;
+drop table if exists data_science.alisa_test1_orderrate1_tmp6;
 create table if not exists data_science.alisa_test1_orderrate1_tmp6 as
          select a.*,case when b.carry_id is not null then 1 else 0 end is_way_comp
          from (select waybill_no,dest_zone_code,deliver_emp_code,signin_tm,min(inc_day) inc_day from gdl.tt_waybill_info
@@ -82,6 +80,7 @@ from data_science.alisa_test1_orderrate1_tmp1 where inputer_emp_code<>'000000'  
 group by case when substr(source_zone_code,0,3)='755' then 1
 when substr(source_zone_code,0,3)='021' then 2 else 0 end;
 
+
 -------------网点
 select  case when source_zone_code in ('755AQ','755Q','755FK') then 1 else 0 end,weekofyear(consigned_tm),
 count(distinct waybill_no) as yundanliang
@@ -105,7 +104,6 @@ from data_science.alisa_test1_orderrate1_tmp3 where substr(deptid,0,3) in ('021'
 group by substr(deptid,0,3),weekofyear(sendtime)
 
 
-
 ----------------订单的投诉情况
 
 select weekofyear(sendtime),case when substr(deptid,0,3) in ('755','010','020','021','571','512','023') then 1 else 0 end,
@@ -115,21 +113,11 @@ from data_science.alisa_test1_orderrate1_tmp5
 GROUP BY weekofyear(sendtime),case when substr(deptid,0,3)
 in ('755','010','020','021','571','512','023') then 1 else 0 end;
 
-
-
 select weekofyear(sendtime),
 COUNT(distinct ORDERID),
 count(distinct case when is_order_comp=1 then orderid end)
 from data_science.alisa_test1_orderrate1_tmp5  where deptid in ('755AQ','755Q','755FK')
 GROUP BY weekofyear(sendtime);
-
-
-
-
-
-
-
-
 
 
 ---------------------------
