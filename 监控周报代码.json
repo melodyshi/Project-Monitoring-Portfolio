@@ -1,0 +1,143 @@
+drop table if exists data_science.alisa_test1_orderrate1_tmp;
+create table if not exists data_science.alisa_test1_orderrate1_tmp as
+select a.*,b.bno
+from
+(select deptid,orderid,custtel,ordertype,from_unixtime(cast(substr(sendtime,0,10) as bigint),'yyyy-MM-dd HH:mm:ss') sendtime
+    from ods_sch.sch_orders
+where inc_day between '20170522' and '20170528'
+         and to_date(from_unixtime(cast(substr(sendtime,0,10) as bigint),'yyyy-MM-dd HH:mm:ss'))
+         between '2017-05-22' and '2017-05-28') a
+left outer join
+(select orderid,bno
+        from  ods_sch.sch_orderjob where inc_day between '20170522' and '20170528'  and bno is not null group by orderid,bno) b
+    on a.orderid=b.orderid;
+
+
+drop table if exists data_science.alisa_test1_orderrate1_tmp1;
+create table if not exists data_science.alisa_test1_orderrate1_tmp1 as
+select a.*,b.*,case when b.bno is null then 0 else 1 end is_order
+from
+(select waybill_no,source_zone_code,consigned_tm,inputer_emp_code,min(inc_day) inc_day from gdl.tt_waybill_info
+         where inc_day between '20170522' and '20170528' and to_date(consigned_tm) between '2017-05-22' and '2017-05-28'
+group by waybill_no,source_zone_code,consigned_tm,inputer_emp_code) a
+left outer join data_science.alisa_test1_orderrate1_tmp b on a.waybill_no=b.bno;
+
+
+
+------------ 订单揽收情况
+
+
+------------ 订单揽收情况
+drop table if exists data_science.alisa_test1_orderrate1_tmp3;
+create table if not exists data_science.alisa_test1_orderrate1_tmp3 as
+select a.*,b.waybill_no,consigned_tm,inputer_emp_code,b.inc_day
+from data_science.alisa_test1_orderrate1_tmp a
+left outer join (select waybill_no,consigned_tm,inputer_emp_code,min(inc_day) inc_day from data_science.alisa_test1_orderrate1_tmp1
+group by waybill_no,consigned_tm,inputer_emp_code) b on
+a.bno=b.waybill_no;
+
+
+---------------是否有投诉
+drop table if exists data_science.alisa_test1_orderrate1_tmp5;
+create table if not exists data_science.alisa_test1_orderrate1_tmp5 as
+         select a.*,case when b.orderid is not null then 1 else 0 end is_order_comp
+         from data_science.alisa_test1_orderrate1_tmp a
+         left outer join (select regexp_replace(split(content,',')[2],'订单号','') orderid from ods_cos.complain where job_id is not null
+          and FOCUS='853970635' and CONTACT_LINK='102000000'
+and CUSTOMER_FEEDBACK in ('853970644','853970648')
+  group by regexp_replace(split(content,',')[2],'订单号','')) b on a.orderid=b.orderid;
+
+
+  drop table if exists data_science.alisa_test1_orderrate1_tmp6;
+create table if not exists data_science.alisa_test1_orderrate1_tmp6 as
+         select a.*,case when b.carry_id is not null then 1 else 0 end is_way_comp
+         from (select waybill_no,dest_zone_code,deliver_emp_code,signin_tm,min(inc_day) inc_day from gdl.tt_waybill_info
+         where inc_day between '20170522' and '20170528' and to_date(signin_tm) between '2017-05-22' and '2017-05-28'
+group by waybill_no,dest_zone_code,deliver_emp_code) a
+         left outer join (select carry_id from ods_cos.complain where job_id is not null
+          and  FOCUS in ('101050000','101030000') and CONTACT_LINK='101000000'
+and CUSTOMER_FEEDBACK  in ('853970322','101030100')
+  group by  carry_id) b on a.waybill_no=b.carry_id;
+
+
+
+
+
+-----------整体表现
+select
+weekofyear(consigned_tm),
+count(distinct waybill_no),
+count(distinct case when is_order=1 then waybill_no end),
+count(distinct case when inputer_emp_code<>'000000' then waybill_no end) as dianzi,
+count(distinct case when inputer_emp_code<>'000000' and orderid like 'CX%' and ordertype not in ('2','5') then waybill_no end) as cx,
+count(distinct case when inputer_emp_code<>'000000' and substr(waybill_no,0,3)='086' then waybill_no end) as saoma
+from data_science.alisa_test1_orderrate1_tmp1 group by weekofyear(consigned_tm);
+
+--------------------
+select
+case when substr(source_zone_code,0,3)='755' then 1
+when substr(source_zone_code,0,3)='021' then 2 else 0 end,
+count(distinct waybill_no)
+from data_science.alisa_test1_orderrate1_tmp1 where inputer_emp_code<>'000000'  and inputer_emp_code like '%BSP%'
+group by case when substr(source_zone_code,0,3)='755' then 1
+when substr(source_zone_code,0,3)='021' then 2 else 0 end;
+
+-------------网点
+select  case when source_zone_code in ('755AQ','755Q','755FK') then 1 else 0 end,weekofyear(consigned_tm),
+count(distinct waybill_no) as yundanliang
+from data_science.alisa_test1_orderrate1_tmp1
+group by  case when source_zone_code in ('755AQ','755Q','755FK') then 1 else 0 end,weekofyear(consigned_tm);
+
+
+
+--------------订单揽收情况
+select weekofyear(sendtime),case when orderid like 'CX%' and ordertype not in ('2','5') THEN 1
+when ordertype='40' then 2 ELSE 0 END,
+count(distinct orderid),count(distinct case when waybill_no is not null then orderid end)
+from data_science.alisa_test1_orderrate1_tmp3  group by weekofyear(sendtime),
+case when orderid like 'CX%' and ordertype not in ('2','5') THEN 1
+when ordertype='40' then 2 ELSE 0 END;
+
+-----------------扫码
+select substr(deptid,0,3),weekofyear(sendtime)
+count(distinct orderid),count(distinct case when waybill_no is not null then orderid end)
+from data_science.alisa_test1_orderrate1_tmp3 where substr(deptid,0,3) in ('021','755') and substr(waybill_no,0,3)='086'
+group by substr(deptid,0,3),weekofyear(sendtime)
+
+
+
+----------------订单的投诉情况
+
+select weekofyear(sendtime),case when substr(deptid,0,3) in ('755','010','020','021','571','512','023') then 1 else 0 end,
+COUNT(distinct ORDERID),
+count(distinct case when is_order_comp=1 then orderid end)
+from data_science.alisa_test1_orderrate1_tmp5
+GROUP BY weekofyear(sendtime),case when substr(deptid,0,3)
+in ('755','010','020','021','571','512','023') then 1 else 0 end;
+
+
+
+select weekofyear(sendtime),
+COUNT(distinct ORDERID),
+count(distinct case when is_order_comp=1 then orderid end)
+from data_science.alisa_test1_orderrate1_tmp5  where deptid in ('755AQ','755Q','755FK')
+GROUP BY weekofyear(sendtime);
+
+
+
+
+
+
+
+
+
+
+---------------------------
+
+SELECT weekofyear(sendtime),
+case when orderid like 'CX%' and ordertype not in ('2','5') THEN 1
+when ordertype='40' then 2 ELSE 0 END,
+count(DISTINCT a.orderid)
+FROM data_science.alisa_test1_orderrate1_tmp1 a
+group by weekofyear(sendtime),case when orderid like 'CX%' and ordertype not in ('2','5') THEN 1
+when ordertype='40' then 2 ELSE 0 END
